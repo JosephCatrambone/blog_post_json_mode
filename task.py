@@ -2,8 +2,8 @@
 
 import json
 from enum import Enum
-from pydantic import BaseModel, ValidationError, Field
-from typing import Optional, Union
+from pydantic import BaseModel, create_model, Field, ValidationError
+from typing import Any, Optional, Union
 
 
 #
@@ -50,8 +50,9 @@ class NestedThingExtraction(BaseModel):
 
 # Unit Extraction
 class UnitExtraction(BaseModel):
-    quantity: float
-    unit: str
+    item: str  # i.e. Naproxin
+    quantity: float  # 100.0
+    unit: str = ""  # mg
 
 
 class NestedUnitExtraction(BaseModel):
@@ -83,6 +84,76 @@ class NestedEventExtraction(BaseModel):
     events: list[EventExtraction]
 
 
+# Function Calling:
+class FunctionCallBasic(BaseModel):
+    function_name: str
+    arguments: dict[str, Any]
+
+
+def generate_pydantic_object_from_bfcl_function_description(bfcl_dict) -> BaseModel:
+    """Given the "function" field of a BFCL line, generates a BaseModel class which
+    can 'parse' as JSON. Example:
+    Input Description: {...
+      name: "circumference",
+      parameters: {
+        type: dict,
+        properties: {
+          radius: {
+            type: integer,
+            description: "The radius of the circle."
+          },
+          units: {
+            type: string,
+            description: "Units for the output measurement. Default: cm"
+          },
+        required: [ "radius" ]
+      }
+    }
+    Output:
+    class Circumference(BaseModel):
+        radius: integer
+        units: string = "cm"
+    """
+    class_name = bfcl_dict["name"].capitalize()
+    args = dict()
+    for param_name, param_properties in bfcl_dict["parameters"]["properties"].items():
+        param_name = param_name.replace(".", "_")  # For class support + OpenAI compat.
+        ptype = param_properties["type"]
+        pdesc = param_properties["description"]
+        required = param_name in bfcl_dict["parameters"]["required"]
+        if ptype == "string":
+            ptype = str
+            default_value = ""
+        elif ptype == "integer":
+            ptype = int
+            default_value = 0
+        elif ptype == "float":
+            ptype = float
+            default_value = 0.0
+        elif ptype == "boolean":
+            ptype = bool
+            default_value = False
+        elif ptype == "array":
+            ptype = list
+            default_value = list()
+        elif ptype == "dict":
+            ptype = dict
+            default_value = dict()
+        elif ptype == "any":
+            ptype = Any
+            default_value = None
+        else:
+            print(f"MISSING VALUE FOR PARAMETER {param_name}: {ptype} {pdesc}")
+            ptype = Any
+            default_value = None
+        # TODO: Enum, dict, perhaps just use from_schema, if we can?
+        if required:
+            args[param_name] = (ptype, ...)
+        else:
+            args[param_name] = (ptype, default_value)
+    return create_model(class_name, **args)
+
+
 #
 # Descriptors and Sample Data:
 #
@@ -93,6 +164,7 @@ class Task(str, Enum):
     THING_EXTRACTION = "thing_extraction"
     UNIT_EXTRACTION = "unit_extraction"
     EVENT_EXTRACTION = "event_extraction"
+    FUNCTION_CALL_BASIC = "function_call_basic"
 
 
 DATA_MODELS = {
@@ -101,6 +173,7 @@ DATA_MODELS = {
     Task.THING_EXTRACTION: NestedThingExtraction,
     Task.UNIT_EXTRACTION: NestedUnitExtraction,
     Task.EVENT_EXTRACTION: NestedEventExtraction,
+    Task.FUNCTION_CALL_BASIC: FunctionCallBasic,
 }
 
 
@@ -145,6 +218,7 @@ NUEXTRACT_SCHEMAS = {
 """{
     "items": [
         {
+            "item": "",
             "quantity": "",
             "unit": ""
         }
@@ -275,14 +349,16 @@ EXAMPLES = {
         }
     ]
 }"""],
-    Task.UNIT_EXTRACTION:[
+    Task.UNIT_EXTRACTION: [
 """{
     "items": [
         {
+            "item": "water",
             "quantity": "10",
             "unit": "oz"
         },
         {
+            "item": "sodium",
             "quantity": "320",
             "unit": "ml"
         }
@@ -291,6 +367,7 @@ EXAMPLES = {
 """{
     "items": [
         {
+            "item": "distance to Andromeda",
             "quantity": "2.61",
             "unit": "lightyears"
         }
@@ -299,10 +376,12 @@ EXAMPLES = {
     """{
     "items": [
         {
+            "item": "speed of light",
             "quantity": "3.0x10^8",
             "unit": "m/s"
         },
         {
+            "item": "acceleration due to gravity",
             "quantity": "9.81",
             "unit": "m/s^2"
         }

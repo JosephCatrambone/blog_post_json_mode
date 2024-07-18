@@ -1,46 +1,69 @@
 
 import json
+import os
 import sqlite3
 #%pip install partial-json-parser
 from dataclasses import dataclass
 
 import partial_json_parser
-from pydantic import ValidationError
+from sentence_transformers import SentenceTransformer
 
-from dataset import load_ground_truth
 from task import Task, DATA_MODELS, NERMultiExtraction, NERNestedExtraction, NestedEventExtraction, NestedThingExtraction, NestedUnitExtraction
+
+
+model = SentenceTransformer("all-mpnet-base-v2")
 
 
 @dataclass
 class Score:
     well_formed_json: bool = False
-    schema_matches_exact: bool = False  # Has all required fields and no extra imagined fields.
-    schema_matches_min: bool = False  # Has at least the required fields but may have extra imagined fields. match_exact implies match min.
-    constraints_followed: bool = False  # All fields are present and none violate constraints
+    schema_matches_no_extras: bool = False  # Has at least the required fields but may have extra imagined fields. match_exact implies this.
+    schema_matches_exact: bool = False  # Has all required fields and no extra imagined fields. decode_success implies this.
+    schema_decode_success: bool = False  # All fields are present and none violate constraints
     #content_extracted: bool = False  # Contain the desired data and no hallucinated content
     #no_duplicate_content: bool = False  # Contains only desired valid data. Not multiple copies of it
     #no_hallucinated_content: bool = False  # Contains the desired valid data but has more than 50% other unrelated data (badly hallucinated content)
-    iou_score: float = 0.0  # The intersection over union of the data with ground truth.
+    eval_score: float = 0.0  # The intersection over union of the data with ground truth.
 
 
 def run_evaluations():
-    print("Reading model_outputs.db and saving to evaluation.db")
-    input_connection = sqlite3.connect('model_outputs.db')
-    input_connection.row_factory = sqlite3.Row
-    output_connection = sqlite3.connect("evaluation.db")
-    output_connection.row_factory = sqlite3.Row
-    output_connection.execute("CREATE TABLE evaluation (task TEXT, guardrails TEXT, model TEXT, num_shots INTEGER, dataset_name TEXT, doc_idx INTEGER, well_formed_json INTEGER, schema_matches_min INTEGER, schema_matches_exact INTEGER, constraints_followed INTEGER, content_iou REAL);")
-    cursor = input_connection.cursor()
-    cursor.execute("SELECT * FROM model_outputs;")
-    ground_truth = load_ground_truth()
+    db = sqlite3.connect("data.db")
+    db.row_factory = sqlite3.Row
+    db.execute("""CREATE TABLE "evaluation" (
+        "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+        "model_output_id"	INTEGER NOT NULL,
+        "valid_json"	INTEGER NOT NULL,
+        "schema_match_no_extras"	INTEGER NOT NULL,
+        "schema_match_exact"	INTEGER NOT NULL,
+        "schema_decode_success"	INTEGER NOT NULL,
+        "eval_score"	REAL NOT NULL
+    );""")
+    cursor = db.execute("""
+    SELECT 
+        model_outputs.id AS model_output_id, 
+        tasks.task AS task_name, 
+        model_outputs.raw_output AS model_out, 
+        ground_truth.json AS gt_text 
+    FROM model_outputs 
+    JOIN tasks ON model_outputs.task_id = tasks.id 
+    JOIN ground_truth ON (
+        ground_truth.document_id = model_outputs.document_id AND 
+        ground_truth.task_id = model_outputs.task_id
+    );
+    """)
     for r in cursor:
+        task_name = r["task_name"]
+        task = Task(task_name)
+        output_id = r["model_output_id"]
+        raw_model_output = r["model_out"]
+        ground_truth = json.loads(r["gt_text"])
+
         s = Score()
-        task = Task(r["task"])
 
         # Just try to load the thing, falling back to partial loading.
         maybe_data = dict()
         try:
-            maybe_data = json.loads(r['raw_model_output'])
+            maybe_data = json.loads(raw_model_output)
             s.well_formed_json = True
         except json.JSONDecodeError:
             s.well_formed_json = False
@@ -48,17 +71,18 @@ def run_evaluations():
         # Not well formed, but parsable:
         if not s.well_formed_json:
             try:
-                maybe_data = partial_json_parser.loads(r['raw_model_output'])
+                maybe_data = partial_json_parser.loads(raw_model_output)
             except Exception:  # partial_json_parser.JSONDecodeError:
                 maybe_data = dict()
 
         # Diff the keys to see if we have extras:
         # TODO: Use the BFCL list/dict tree comparison.
-        parsed_data = None
         if dict_has_all_fields(DATA_MODELS[task].model_fields, maybe_data):
             s.schema_matches_min = True
-            if dict_has_no_extra_fields(DATA_MODELS[task].model_fields, maybe_data):
-                s.schema_matches_exact = True
+        if dict_has_no_extra_fields(DATA_MODELS[task].model_fields, maybe_data):
+            s.schema_matches_no_extras = True
+
+        # Maybe try to do a parse with the data model we have defined:
         try:
             #DATA_MODELS[task].__pydantic_model__.parse_raw()
             #if isinstance(maybe_data, dict):
@@ -67,8 +91,6 @@ def run_evaluations():
             #    parsed_data = DATA_MODELS[task](maybe_data)
             parsed_data = DATA_MODELS[task](**maybe_data)
             s.schema_matches_exact = True
-            s.constraints_followed = True
-            s.schema_matches_min = True
         except Exception:
             # Missing some key fields.
             parsed_data = None
@@ -77,41 +99,94 @@ def run_evaluations():
         # The first qualitative measure.
         if task in TASK_TO_EVAL_FN and parsed_data is not None:
             try:
-                TASK_TO_EVAL_FN[task](ground_truth[str(task)][r["dataset"]][str(r["doc_idx"])], parsed_data, s)
+                TASK_TO_EVAL_FN[task](DATA_MODELS[task](**ground_truth), parsed_data, s)
             except Exception as e:
                 print(e)
+                continue
 
-        output_connection.execute(
-            "INSERT INTO evaluation (task, guardrails, model, num_shots, dataset_name, doc_idx, well_formed_json, schema_matches_min, schema_matches_exact, constraints_followed, content_iou) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-            (r["task"], r["guardrails"], r["model"], r["num_shots"], r["dataset"], r["doc_idx"], s.well_formed_json, s.schema_matches_min, s.schema_matches_exact, s.constraints_followed, s.iou_score)
+        db.execute(
+            """INSERT INTO evaluation ( 
+                model_output_id,
+                valid_json,
+                schema_match_no_extras,
+                schema_match_exact,
+                schema_decode_success,
+                eval_score,
+            ) VALUES (?, ?, ?, ?, ?, ?);""", (
+                output_id,
+                s.well_formed_json,
+                s.schema_matches_no_extras,
+                s.schema_matches_exact,
+                s.schema_decode_success,
+                s.eval_score
+            )
         )
-    output_connection.commit()
-    input_connection.close()
-    output_connection.close()
+    db.commit()
+    db.close()
 
 
-def eval_ner_flat(ground_truth: dict, parsed_data: NERMultiExtraction, score_ref: Score):
-    # TODO: This is perhaps slightly lazy.  Since NER is a mess of edge cases, we pile together the different lists and then diff them.
-    ground_truth = NERMultiExtraction(**ground_truth)
+def eval_ner_flat(ground_truth: NERMultiExtraction, parsed_data: NERMultiExtraction, score_ref: Score):
+    # TODO: This is perhaps slightly lazy.
+    """
+    embeddings = model.encode(["San Francisco", "California", "San Francisco, CA", "San Francisco, California", "SF", "Maine", "New England", "Location"])
+    similarities = model.similarity(model.encode(["San Francisco", ]), embeddings)
+    >>> tensor([[1.0000, 0.6371, 0.8915, 0.9057, 0.7240, 0.4704, 0.6216, 0.6042]])
+    """
+
+    # Dump all the elements together because it turns out that NER is really noisy:
+    gt_elements = set()
+    pred_elements = set()
+    for attribute in ('names', 'locations', 'organizations', 'misc'):
+        gt_elements |= set(ground_truth.__getattribute__(attribute))
+        pred_elements |= set(parsed_data.__getattribute__(attribute))
+    gt_elements = list(gt_elements)
+    pred_elements = list(pred_elements)
+
+    if len(gt_elements) == 0:
+        # When there are no elements, predicting the empty set is a match, otherwise we halve the score for every element.
+        score = 1.0 / (1.0 + len(pred_elements)**2)
+    else:
+        FUZZY_MATCH = False
+        BINARIZE = False
+        THRESHOLD = 0.7
+        gt_entry_embeddings = model.encode(gt_elements)
+        model_entry_embeddings = model.encode(pred_elements)
+        similarity = model.similarity(gt_entry_embeddings, model_entry_embeddings)
+        if FUZZY_MATCH:  # Just sum the max matches.
+            score = similarity.max(dim=1).values.sum().item() / float(max(similarity.shape))
+        elif BINARIZE:  # If the max match is above a threshold, treat it like a match.
+            score = ((similarity.max(dim=1).values > THRESHOLD) * 1.0).sum().item() / float(max(similarity.shape))
+        else:  # If the max match is above a threshold, add it raw rather than snap to 1.0.
+            score = ((similarity.max(dim=1).values > THRESHOLD) * similarity.max(dim=1).values).sum().item() / float(max(similarity.shape))
+        # If the ground truth and model were perfectly aligned we would have a square matrix with ones along the diagonal.
+
+    if score_ref is not None:
+        score_ref.eval_score = score
+
+    """
     gt_pile_of_names = set()
-    gt_pile_of_names.union(set(ground_truth.names))
-    gt_pile_of_names.union(set(ground_truth.locations))
-    gt_pile_of_names.union(set(ground_truth.organizations))
-    gt_pile_of_names.union(set(ground_truth.misc))
+    gt_pile_of_names |= set(ground_truth.names)
+    gt_pile_of_names |= set(ground_truth.locations)
+    gt_pile_of_names |= set(ground_truth.organizations)
+    gt_pile_of_names |= set(ground_truth.misc)
 
     parsed_pile_of_names = set()
-    parsed_pile_of_names.union(set(parsed_data.names))
-    parsed_pile_of_names.union(set(parsed_data.locations))
-    parsed_pile_of_names.union(set(parsed_data.organizations))
-    parsed_pile_of_names.union(set(parsed_data.misc))
+    parsed_pile_of_names |= set(parsed_data.names)
+    parsed_pile_of_names |= set(parsed_data.locations)
+    parsed_pile_of_names |= set(parsed_data.organizations)
+    parsed_pile_of_names |= set(parsed_data.misc)
 
     # IoU evaluation.
     intersection_size = float(len(parsed_pile_of_names.intersection(gt_pile_of_names)))
     union_size = float(len(parsed_pile_of_names.union(gt_pile_of_names)))
     if union_size < 1e-6:
+        breakpoint()
         raise Exception("Ground truth empty!?")
     else:
-        score_ref.iou_score = intersection_size/union_size
+        score_ref.eval_score = intersection_size/union_size
+    """
+
+    return score
 
 
 TASK_TO_EVAL_FN = {

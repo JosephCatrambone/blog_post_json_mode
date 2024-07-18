@@ -7,6 +7,7 @@ import gzip
 import json
 import os
 import random
+import sqlite3
 import zipfile
 from io import StringIO
 
@@ -41,7 +42,20 @@ def load_pre_generated_data():
             print(f"{len(news_articles)} news articles")
             wikipedia = data['wikipedia']
             print(f"{len(wikipedia)} wikipedia pages")
+            golden = data['golden']
+            print(f"{len(golden)} manually generated paragraphs loaded")
     return data
+
+
+def add_data_to_db(data: dict):
+    # Given the {'news': [ articles }, 'wiki': [articles] } data, add all to the DB.
+    db = sqlite3.open("data.db")
+    db.row_factory = sqlite3.Row
+    db.execute("CREATE TABLE documents (id INTEGER PRIMARY KEY AUTO INCREMENT, source TEXT, text TEXT);")
+    for source, doclist in data.items():
+        for doc in doclist:
+            db.execute("INSERT INTO documents (source, text) VALUES (?, ?);", (source, doc))
+    db.commit()
 
 
 def load_ground_truth():
@@ -64,7 +78,6 @@ def generate_data():
     with gzip.open(PROCESSED_DATASET_NAME, 'wt') as fout:
         json.dump(data, fout)
     return data
-
 
 
 def generate_wikipedia():
@@ -125,3 +138,19 @@ def generate_news():
     random.shuffle(news_articles)
     news_articles = news_articles[:MAX_SAMPLES_PER_SOURCE]
     return news_articles
+
+
+def generate_bfcl():
+    with open("/Users/josephcatrambone/Datasets/Berkeley-Function-Calling-Leaderboard/gorilla_openfunctions_v1_test_simple.json", 'rt') as fin:
+        examples = [json.loads(line)["question"] for line in fin]
+    return examples
+
+
+def generate_amazon():
+    # Pulls from the 2014 Amazon Reviews dataset and selects a small subset at random.
+    reviews = list()
+    with gzip.open("/Users/josephcatrambone/Datasets/amazon_review_dataset_2014_unduplicated_kcore_5.json.gz", 'rt') as fin:
+        for line in fin:
+            if random.random() < 0.001:
+                reviews.append(json.loads(line)["reviewText"])
+    return reviews

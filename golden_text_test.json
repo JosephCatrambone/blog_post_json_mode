@@ -1,0 +1,343 @@
+[
+  {
+    "text":"2024-12-29: At the end of the year Bob Loblaw, the creator of Bob Loblaw's Law Blog and owner of The Web Log Blog Consortium, decided to take a trip to Philadelphia.  He purchased 1 coffee.",
+    "things": [
+      {
+        "text": "Bob Loblaw",
+        "extraction_type": "person"
+      },
+      {
+        "text": "Bob Loblaw's Law Blog",
+        "extraction_type": "website"
+      },
+      {
+        "text": "The Web Log Blog Consortium",
+        "extraction_type": "organization"
+      },
+      {
+        "text": "Philadelphia",
+        "extraction_type": "location"
+      }
+    ],
+    "entities": {
+      "names": ["Bob Loblaw"],
+      "locations": ["Philadelphia"],
+      "organizations": ["The Web Log Blog Consortium"],
+      "misc": ["Bob Loblaw's Law Blog"]
+    },
+    "events": [
+      {
+        "year": 2024,
+        "month": 12,
+        "day": 29,
+        "hour": 0,
+        "minute": 0,
+        "name": "Bob Loblaw went to Philadelphia",
+        "location":
+        {
+          "fine": "Philadelphia",
+          "coarse": ""
+        }
+      }
+    ],
+    "quantities": [{
+      "item": "coffee",
+      "quantity": 1,
+      "unit": ""
+    }]
+  },
+
+  {
+    "text":"9:30 AM, San Francisco, California, Aaron Spacemuseum announced his appointment to the chair of the Air and Space Museum. The announcement came as a surprise to Christopher U. Browne, director of the museum since 2022.",
+    "things": [
+      {
+        "text": "Aaron Spacemuseum",
+        "extraction_type": "person"
+      },
+      {
+        "text": "Christopher U. Browne",
+        "extraction_type": "person"
+      },
+      {
+        "text": "The Air and Space Museum",
+        "extraction_type": "museum"
+      },
+      {
+        "text": "San Francisco, California",
+        "extraction_type": "location"
+      }
+    ],
+    "entities": {
+      "names": ["Aaron Spacemuseum", "Christopher U. Browne"],
+      "locations": ["San Francisco, California"],
+      "organizations": ["The Air and Space Museum"],
+      "misc": []
+    },
+    "events": [
+      {
+        "year": 0,
+        "month": 0,
+        "day": 0,
+        "hour": 9,
+        "minute": 30,
+        "name": "Aaron Spacemuseum announced his appointment to the chair of the Air and Space Museum.",
+        "location":
+        {
+          "fine": "San Francisco",
+          "coarse": "California"
+        }
+      },
+      {
+        "year": 2022,
+        "month": 0,
+        "day": 0,
+        "hour": 0,
+        "minute": 0,
+        "name": "Christopher U. Browne becomes director of the Air and Space Museum",
+        "location": null
+      }
+    ],
+    "quantities": []
+  },
+
+  {
+    "text":"It takes a big man to admit that he was wrong. It takes a bigger man to give a giraffe a haircut.",
+    "things": [],
+    "entities": {
+      "names": [],
+      "locations": [],
+      "organizations": [],
+      "misc": []
+    },
+    "events": [],
+    "quantities": []
+  },
+
+  {
+    "text":"In these politically charged times, it's important to remember what's really important. Love and cherish one another. It's always a shame when a family is torn apart by something as silly as a pack of wild animals.",
+    "things": [],
+    "entities": {
+      "names": [],
+      "locations": [],
+      "organizations": [],
+      "misc": []
+    },
+    "events": [],
+    "quantities": []
+  },
+
+  {
+    "text":"Eponymous Laws, unlike their Natural counterparts, are often less formal and less rigorously defined. Popular examples of Eponymous Laws are \"Murphy's Law\", which says that anything that can go wrong will go wrong, and \"Betteridge's Law\", which says that the answer to any news article asking a question can be best answered in the negative, because if it were the affirmative then the newspapers would lead with an assertion rather than a question.",
+    "things": [
+      {
+        "text": "Eponymous Laws",
+        "extraction_type": "laws"
+      },
+      {
+        "text": "Murphy's Law",
+        "extraction_type": "law"
+      },
+      {
+        "text": "Betteridge's Law",
+        "extraction_type": "law"
+      }
+    ],
+    "entities": {
+      "names": [],
+      "locations": [],
+      "organizations": [],
+      "misc": ["Murphy's Law", "Betteridge's Law"]
+    },
+    "events": [],
+    "quantities": []
+  },
+
+  {
+    "text":"Lex Luthor went to the store and bought 50 cakes.  Each cake was 350g and cost 25 US Dollars.",
+    "things": [
+      {
+        "text": "Lex Luthor",
+        "extraction_type": "name"
+      }
+    ],
+    "entities": {
+      "names": ["Lex Luthor"],
+      "locations": [],
+      "organizations": [],
+      "misc": []
+    },
+    "events": [],
+    "quantities": [
+      {
+        "item": "cake",
+        "quantity": 50,
+        "unit": ""
+      },
+      {
+        "item": "cake",
+        "quantity": 350,
+        "unit": "g"
+      },
+      {
+        "item": "cake",
+        "quantity": 25,
+        "unit": "US Dollars"
+      }
+    ]
+  },
+
+  {
+    "text":"Generating text for use in natural language tasks is a difficult endeavor. It needs to be created while keeping in mind that any ambiguity will pile up and potentially derail results. Take Bob the Builder, who attempted to release a line of toys for children before being sued by Robert the Constructor for copyright infringement. This sentence is only padding.",
+    "things": [
+      {
+        "text": "Bob the Builder",
+        "extraction_type": "name"
+      },
+      {
+        "text": "Robert the Constructor",
+        "extraction_type": "name"
+      }
+    ],
+    "entities": {
+      "names": ["Bob the Builder", "Robert the Constructor"],
+      "locations": [],
+      "organizations": [],
+      "misc": []
+    },
+    "events": [],
+    "quantities": []
+  },
+
+  {
+    "text":"EvilCorp has filed a lawsuit against We Are Evil Incorporated alleging trademark infringement. EvilCorp seeks 10 dollars in punitive and compensatory damages. May Hemn, a spokesperson for EvilCorp stated, \"We at EvilCorp will not stand by idly while injustice is allowed to run rampant.\" The trial date is set for July 5th, 2024.",
+    "things": [
+      {
+        "text": "May Hamn",
+        "extraction_type": "name"
+      },
+      {
+        "text": "EvilCorp",
+        "extraction_type": "organization"
+      },
+      {
+        "text": "We Are Evil Incorporated",
+        "extraction_type": "organization"
+      }
+    ],
+    "entities": {
+      "names": ["May Hemn"],
+      "locations": [],
+      "organizations": ["EvilCorp", "We Are Evil Incorporated"],
+      "misc": []
+    },
+    "events": [
+      {
+        "year": 2024,
+        "month": 7,
+        "day": 5,
+        "hour": 0,
+        "minute": 0,
+        "name": "EvilCorp trial date.",
+        "location": null
+      }
+    ],
+    "quantities": [
+      {
+        "item": "compensatory and punitive damages",
+        "quantity": 10,
+        "unit": "dollars"
+      }
+    ]
+  },
+
+  {
+    "text":"Stacy Fakename moved to San Francisco on 2020/10/18 and works for FakeCompany as the head of engineering. She is currently working on The Fake Project.",
+    "things": [
+      {
+        "text": "Stacy Fakename",
+        "extraction_type": "name"
+      },
+      {
+        "text": "FakeCompany",
+        "extraction_type": "organization"
+      },
+      {
+        "text": "San Francisco",
+        "extraction_type": "location"
+      },
+      {
+        "text": "The Fake Project",
+        "extraction_type": "project"
+      }
+    ],
+    "entities": {
+      "names": ["Stacy Fakename"],
+      "locations": ["San Francisco"],
+      "organizations": ["FakeCompany"],
+      "misc": ["The Fake Project"]
+    },
+    "events": [
+      {
+        "year": 2020,
+        "month": 10,
+        "day": 18,
+        "hour": 0,
+        "minute": 0,
+        "name": "Stacy Fakename moved to San Francisco",
+        "location": {
+          "fine": "San Francisco",
+          "coarse": ""
+        }
+      }
+    ],
+    "quantities": []
+  },
+
+  {
+    "text":"My name is Norm Alman, son of Hugh Man. I am a normal man. This is my wife, Barbara the Barber. For a living I made datasets for use in blog posts and silly publications.",
+    "things": [
+      {
+        "text": "Norm Alman",
+        "extraction_type": "name"
+      },
+      {
+        "text": "Hugh Man",
+        "extraction_type": "name"
+      },
+      {
+        "text": "Barbara the Barber",
+        "extraction_type": "name"
+      }
+    ],
+    "entities": {
+      "names": ["Norm Alman", "Hugh Man", "Barbara the Barber"],
+      "locations": [],
+      "organizations": [],
+      "misc": []
+    },
+    "events": [],
+    "quantities": []
+  },
+
+  {
+    "text":"Tom and Zendaya got married. He took her last name.",
+    "things": [
+      {
+        "text": "Tom",
+        "extraction_type": "name"
+      },
+      {
+        "text": "Zendaya",
+        "extraction_type": "name"
+      }
+    ],
+    "entities": {
+      "names": ["Tom", "Zendaya"],
+      "locations": [],
+      "organizations": [],
+      "misc": []
+    },
+    "events": [],
+    "quantities": []
+  }
+]
