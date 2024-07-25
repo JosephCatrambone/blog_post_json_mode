@@ -4,19 +4,19 @@
     "things": [
       {
         "text": "Bob Loblaw",
-        "extraction_type": "person"
+        "thingtype": "person"
       },
       {
         "text": "Bob Loblaw's Law Blog",
-        "extraction_type": "website"
+        "thingtype": "website"
       },
       {
         "text": "The Web Log Blog Consortium",
-        "extraction_type": "organization"
+        "thingtype": "organization"
       },
       {
         "text": "Philadelphia",
-        "extraction_type": "location"
+        "thingtype": "location"
       }
     ],
     "entities": {
@@ -52,19 +52,19 @@
     "things": [
       {
         "text": "Aaron Spacemuseum",
-        "extraction_type": "person"
+        "thingtype": "person"
       },
       {
         "text": "Christopher U. Browne",
-        "extraction_type": "person"
+        "thingtype": "person"
       },
       {
         "text": "The Air and Space Museum",
-        "extraction_type": "museum"
+        "thingtype": "museum"
       },
       {
         "text": "San Francisco, California",
-        "extraction_type": "location"
+        "thingtype": "location"
       }
     ],
     "entities": {
@@ -131,15 +131,15 @@
     "things": [
       {
         "text": "Eponymous Laws",
-        "extraction_type": "laws"
+        "thingtype": "laws"
       },
       {
         "text": "Murphy's Law",
-        "extraction_type": "law"
+        "thingtype": "law"
       },
       {
         "text": "Betteridge's Law",
-        "extraction_type": "law"
+        "thingtype": "law"
       }
     ],
     "entities": {
@@ -191,11 +191,11 @@
     "things": [
       {
         "text": "Bob the Builder",
-        "extraction_type": "name"
+        "thingtype": "name"
       },
       {
         "text": "Robert the Constructor",
-        "extraction_type": "name"
+        "thingtype": "name"
       }
     ],
     "entities": {
@@ -212,16 +212,16 @@
     "text":"EvilCorp has filed a lawsuit against We Are Evil Incorporated alleging trademark infringement. EvilCorp seeks 10 dollars in punitive and compensatory damages. May Hemn, a spokesperson for EvilCorp stated, \"We at EvilCorp will not stand by idly while injustice is allowed to run rampant.\" The trial date is set for July 5th, 2024.",
     "things": [
       {
-        "text": "May Hamn",
-        "extraction_type": "name"
+        "text": "May Hemn",
+        "thingtype": "name"
       },
       {
         "text": "EvilCorp",
-        "extraction_type": "organization"
+        "thingtype": "organization"
       },
       {
         "text": "We Are Evil Incorporated",
-        "extraction_type": "organization"
+        "thingtype": "organization"
       }
     ],
     "entities": {
@@ -255,19 +255,19 @@
     "things": [
       {
         "text": "Stacy Fakename",
-        "extraction_type": "name"
+        "thingtype": "name"
       },
       {
         "text": "FakeCompany",
-        "extraction_type": "organization"
+        "thingtype": "organization"
       },
       {
         "text": "San Francisco",
-        "extraction_type": "location"
+        "thingtype": "location"
       },
       {
         "text": "The Fake Project",
-        "extraction_type": "project"
+        "thingtype": "project"
       }
     ],
     "entities": {
@@ -298,15 +298,15 @@
     "things": [
       {
         "text": "Norm Alman",
-        "extraction_type": "name"
+        "thingtype": "name"
       },
       {
         "text": "Hugh Man",
-        "extraction_type": "name"
+        "thingtype": "name"
       },
       {
         "text": "Barbara the Barber",
-        "extraction_type": "name"
+        "thingtype": "name"
       }
     ],
     "entities": {
@@ -324,11 +324,11 @@
     "things": [
       {
         "text": "Tom",
-        "extraction_type": "name"
+        "thingtype": "name"
       },
       {
         "text": "Zendaya",
-        "extraction_type": "name"
+        "thingtype": "name"
       }
     ],
     "entities": {

@@ -51,7 +51,7 @@ class NestedThingExtraction(BaseModel):
 # Unit Extraction
 class UnitExtraction(BaseModel):
     item: str  # i.e. Naproxin
-    quantity: float  # 100.0
+    quantity: Union[float, int]  # 100.0
     unit: str = ""  # mg
 
 
@@ -173,7 +173,7 @@ DATA_MODELS = {
     Task.THING_EXTRACTION: NestedThingExtraction,
     Task.UNIT_EXTRACTION: NestedUnitExtraction,
     Task.EVENT_EXTRACTION: NestedEventExtraction,
-    Task.FUNCTION_CALL_BASIC: FunctionCallBasic,
+    #Task.FUNCTION_CALL_BASIC: FunctionCallBasic,
 }
 
 

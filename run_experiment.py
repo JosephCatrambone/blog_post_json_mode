@@ -2,22 +2,18 @@
 import json
 import sqlite3
 import time
-from enum import Enum
 
 import anthropic
 import pandas as pd
+import torch
 from openai import OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from task import Task, SCHEMAS, NUEXTRACT_SCHEMAS, EXAMPLES
 from dataset import get_data
-#%pip install openai
-#%pip install anthropic
 
 
-
-
-device = "cuda"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def make_df():
@@ -70,7 +66,7 @@ def predict_openai(client, model_name, document, schema, examples):
             }
         ],
         temperature=0.1,
-        max_tokens=1024,
+        max_tokens=2048,
         top_p=1
     ).choices[0].message.content
     return prediction
@@ -82,10 +78,10 @@ def predict_anthropic(client, model_name, document, schema, examples):
         messages=[
             {
                 "role": "user",
-                "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{maybe_examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values.\nInput Document:\n" + doc_text,
+                "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values.\nInput Document:\n" + document,
             }
         ],
-        max_tokens=1024,
+        max_tokens=2048,
         temperature=0.1,
         top_p=1
     ).content[0].text
@@ -98,7 +94,7 @@ def run():
     print("Setting up models and clients:")
     nuextract_model = AutoModelForCausalLM.from_pretrained("numind/NuExtract-tiny", trust_remote_code=True)
     tokenizer = AutoTokenizer.from_pretrained("numind/NuExtract-tiny", trust_remote_code=True)
-    nuextract_model.to("cuda")
+    nuextract_model.to(device)
     nuextract_model.eval()
     anthropic_client = anthropic.Anthropic()
     openai_client = OpenAI()
@@ -106,26 +102,28 @@ def run():
     print("Getting data ready.")
     db = sqlite3.connect("data.db")
     db.row_factory = sqlite3.Row
-    db.execute("CREATE TABLE IF NOT EXISTS model_outputs (id INTEGER PRIMARY KEY AUTO INCREMENT, model_id INTEGER NOT NULL, task_id INTEGER NOT NULL, document_id INTEGER NOT NULL, num_samples INTEGER NOT NULL, time REAL NOT NULL, guardrails TEXT NOT NULL, raw_output TEXT NOT NULL, exception TEXT NOT NULL);")
+    #db.execute("CREATE TABLE IF NOT EXISTS model_outputs (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, task_id INTEGER NOT NULL, document_id INTEGER NOT NULL, num_samples INTEGER NOT NULL, time REAL NOT NULL, guardrails TEXT NOT NULL, raw_output TEXT NOT NULL, exception TEXT NOT NULL);")
 
     print("Running...")
     #for task in (Task.NER_FLAT, ):
     for task in Task:
-        task_id = db.execute("SELECT id FROM tasks WHERE task = ?;", (str(task)[len("Task:"):],)).fetchone()["id"]
+        task_str = str(task)[len("Task:"):]
+        task_id = db.execute("SELECT id FROM tasks WHERE task = ?;", (task_str.lower(),)).fetchone()["id"]
         for model_provider, model_name in (
-                #("numind", "nuextract"),
-                ("openai", "gpt-3.5-turbo"),
-                ("openai", "gpt-4-turbo"),
-                ("anthropic", "claude-3-opus-20240229")
+                ("numind", "nuextract"),
+                #("openai", "gpt-3.5-turbo"),
+                #("openai", "gpt-4-turbo"),
+                #("anthropic", "claude-3-opus-20240229"),
         ):
             model_id = db.execute("SELECT id FROM models WHERE name = ?;", (model_name,)).fetchone()["id"]
             for num_examples in (0, 1, 3):
-                data_cursor = db.execute("SELECT id, text FROM documents WHERE source = 'golden';")
+                data_cursor = db.execute("SELECT id, text FROM documents;")
                 #for datasource in ("wikipedia", "news"):
                 #    for doc_idx, doc_text in enumerate(data[datasource]):
                 for row in data_cursor:
                     doc_id = row["id"]
                     doc_text = row["text"]
+                    print(f"Doc ID: {doc_id} - Task ID: {task_id} - Model: {model_name} - #Ex: {num_examples}")
                     start_time = time.time()  # Will probably be overwritten, but in the event of an exception...
                     prediction = ""
                     ex = ""
@@ -165,3 +163,7 @@ def run():
                         prediction,
                         ex
                     ))
+                    db.commit()
+
+if __name__ == "__main__":
+    run()

@@ -1,0 +1,27 @@
+
+
+
+
+## Types of Errors:
+
+GPT-3.5, particularly in the zero-shot case, seemed to be hampered by the JSON Schema description. This makes total sense, and is further evidenced by the model producing correct outputs when presented with one and three samples.
+
+Example:
+
+```json
+{
+  "properties": {
+    "names": {
+      "items": {"type": "string"},
+      "title": "Names",
+      "type": "array",
+      "default": ["Norm Alman", "Hugh Man", "Barbara the Barber"]}, ...
+```
+
+... as opposed to ...
+
+```json
+{ "names": ["Norm Alman", "Hugh Man", "Barbara the Barber"] }
+```
+
+Another fairly ubiquitous issue is the inclusion of spurious miscellanea.  Like a junk drawer that relentlessly accumulates things you really should throw away, most of the sampled models can't help but hang on to the odd "misc" item, for example: "blog post", "website", etc.  While technically named items, these are not proper nouns. It's not unreasonable to assume that with additional prompt engineering these types of behaviors would be easy to rectify.

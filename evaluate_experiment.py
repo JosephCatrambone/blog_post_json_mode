@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import partial_json_parser
 from sentence_transformers import SentenceTransformer
 
-from task import Task, DATA_MODELS, NERMultiExtraction, NERNestedExtraction, NestedEventExtraction, NestedThingExtraction, NestedUnitExtraction
-
+from task import Task, DATA_MODELS, NERMultiExtraction, NERNestedExtraction, \
+    NestedEventExtraction, NestedThingExtraction, NestedUnitExtraction, UnitExtraction
 
 model = SentenceTransformer("all-mpnet-base-v2")
 
@@ -17,8 +17,7 @@ model = SentenceTransformer("all-mpnet-base-v2")
 @dataclass
 class Score:
     well_formed_json: bool = False
-    schema_matches_no_extras: bool = False  # Has at least the required fields but may have extra imagined fields. match_exact implies this.
-    schema_matches_exact: bool = False  # Has all required fields and no extra imagined fields. decode_success implies this.
+    schema_matches_minimal: bool = False  # Has at least the required fields but may have extra imagined fields. decode_success implies this.
     schema_decode_success: bool = False  # All fields are present and none violate constraints
     #content_extracted: bool = False  # Contain the desired data and no hallucinated content
     #no_duplicate_content: bool = False  # Contains only desired valid data. Not multiple copies of it
@@ -29,15 +28,15 @@ class Score:
 def run_evaluations():
     db = sqlite3.connect("data.db")
     db.row_factory = sqlite3.Row
-    db.execute("""CREATE TABLE "evaluation" (
+    db.execute("""CREATE TABLE IF NOT EXISTS "evaluation" (
         "id" INTEGER PRIMARY KEY AUTOINCREMENT,
         "model_output_id"	INTEGER NOT NULL,
         "valid_json"	INTEGER NOT NULL,
-        "schema_match_no_extras"	INTEGER NOT NULL,
-        "schema_match_exact"	INTEGER NOT NULL,
+        "schema_match_minimal"	INTEGER NOT NULL,
         "schema_decode_success"	INTEGER NOT NULL,
         "eval_score"	REAL NOT NULL
     );""")
+    db.execute("DELETE FROM evaluation;")
     cursor = db.execute("""
     SELECT 
         model_outputs.id AS model_output_id, 
@@ -72,25 +71,23 @@ def run_evaluations():
         if not s.well_formed_json:
             try:
                 maybe_data = partial_json_parser.loads(raw_model_output)
+                # Special pleading:
+                # Often times we'll finish an object with a partial model.
+                # If we can recover by pulling out completely empty dicts, it may help.
             except Exception:  # partial_json_parser.JSONDecodeError:
                 maybe_data = dict()
 
         # Diff the keys to see if we have extras:
         # TODO: Use the BFCL list/dict tree comparison.
         if dict_has_all_fields(DATA_MODELS[task].model_fields, maybe_data):
-            s.schema_matches_min = True
-        if dict_has_no_extra_fields(DATA_MODELS[task].model_fields, maybe_data):
-            s.schema_matches_no_extras = True
+            s.schema_matches_minimal = True
 
         # Maybe try to do a parse with the data model we have defined:
         try:
             #DATA_MODELS[task].__pydantic_model__.parse_raw()
-            #if isinstance(maybe_data, dict):
-            #    parsed_data = DATA_MODELS[task](**maybe_data)
-            #elif isinstance(maybe_data, list):
-            #    parsed_data = DATA_MODELS[task](maybe_data)
             parsed_data = DATA_MODELS[task](**maybe_data)
-            s.schema_matches_exact = True
+            s.schema_matches_minimal = True
+            s.schema_decode_success = True
         except Exception:
             # Missing some key fields.
             parsed_data = None
@@ -98,25 +95,20 @@ def run_evaluations():
         # Check all values.
         # The first qualitative measure.
         if task in TASK_TO_EVAL_FN and parsed_data is not None:
-            try:
-                TASK_TO_EVAL_FN[task](DATA_MODELS[task](**ground_truth), parsed_data, s)
-            except Exception as e:
-                print(e)
-                continue
+            TASK_TO_EVAL_FN[task](DATA_MODELS[task](**ground_truth), parsed_data, s)
 
+        print(f"{output_id} - {task_name} - {s}")
         db.execute(
             """INSERT INTO evaluation ( 
                 model_output_id,
                 valid_json,
-                schema_match_no_extras,
-                schema_match_exact,
+                schema_match_minimal,
                 schema_decode_success,
-                eval_score,
-            ) VALUES (?, ?, ?, ?, ?, ?);""", (
+                eval_score
+            ) VALUES (?, ?, ?, ?, ?);""", (
                 output_id,
                 s.well_formed_json,
-                s.schema_matches_no_extras,
-                s.schema_matches_exact,
+                s.schema_matches_minimal,
                 s.schema_decode_success,
                 s.eval_score
             )
@@ -142,26 +134,88 @@ def eval_ner_flat(ground_truth: NERMultiExtraction, parsed_data: NERMultiExtract
     gt_elements = list(gt_elements)
     pred_elements = list(pred_elements)
 
-    if len(gt_elements) == 0:
-        # When there are no elements, predicting the empty set is a match, otherwise we halve the score for every element.
-        score = 1.0 / (1.0 + len(pred_elements)**2)
-    else:
-        FUZZY_MATCH = False
-        BINARIZE = False
-        THRESHOLD = 0.7
-        gt_entry_embeddings = model.encode(gt_elements)
-        model_entry_embeddings = model.encode(pred_elements)
-        similarity = model.similarity(gt_entry_embeddings, model_entry_embeddings)
-        if FUZZY_MATCH:  # Just sum the max matches.
-            score = similarity.max(dim=1).values.sum().item() / float(max(similarity.shape))
-        elif BINARIZE:  # If the max match is above a threshold, treat it like a match.
-            score = ((similarity.max(dim=1).values > THRESHOLD) * 1.0).sum().item() / float(max(similarity.shape))
-        else:  # If the max match is above a threshold, add it raw rather than snap to 1.0.
-            score = ((similarity.max(dim=1).values > THRESHOLD) * similarity.max(dim=1).values).sum().item() / float(max(similarity.shape))
-        # If the ground truth and model were perfectly aligned we would have a square matrix with ones along the diagonal.
+    score = fuzzy_diff_sets(gt_elements, pred_elements)
 
     if score_ref is not None:
         score_ref.eval_score = score
+
+    return score
+
+
+def eval_ner_nested(ground_truth: NERNestedExtraction, parsed_data: NERNestedExtraction, score_ref: Score):
+    gt_entities = set()
+    pred_entities = set()
+    for ent in ground_truth.named_entities:
+        gt_entities.add(ent.text)
+    for ent in parsed_data.named_entities:
+        pred_entities.add(ent.text)
+    score = fuzzy_diff_sets(gt_entities, pred_entities, threshold=0.7)
+    if score_ref is not None:
+        score_ref.eval_score = score
+    return score
+
+
+def eval_thing_extraction(ground_truth: NestedThingExtraction, parsed_data: NestedThingExtraction, score_ref: Score):
+    gt_entities = set()
+    pred_entities = set()
+    for ent in ground_truth.things:
+        gt_entities.add(ent.text)
+    for ent in parsed_data.things:
+        pred_entities.add(ent.text)
+    score = fuzzy_diff_sets(list(gt_entities), list(pred_entities), threshold=0.7)
+    if score_ref is not None:
+        score_ref.eval_score = score
+    return score
+
+
+def eval_unit_extraction(ground_truth: NestedUnitExtraction, parsed_data: NestedUnitExtraction, score_ref: Score):
+    match_score = 0
+    for gt_item in ground_truth.items:
+        found = False
+        quantity_match = False
+        unit_match = False
+        for pred_item in parsed_data.items:
+            if pred_item.item == gt_item.item:
+                found = True
+                if gt_item.quantity:
+                    if pred_item.quantity:
+                        if abs(float(gt_item.quantity) - float(pred_item.quantity)) < 0.1:
+                            quantity_match = True
+                else:
+                    if not pred_item.quantity:
+                        quantity_match = True  # Both are missing.
+                if gt_item.unit == pred_item.unit:
+                    unit_match = True
+        if found:
+            match_score += 0.5
+        if quantity_match:
+            match_score += 0.25
+        if unit_match:
+            match_score += 0.25
+    if score_ref is not None:
+        score_ref.eval_score = match_score
+    return match_score
+
+
+def fuzzy_diff_sets(gt_elements, pred_elements, threshold: float = 0.0, binarize: bool = False) -> float:
+    if len(gt_elements) == 0 or len(pred_elements) == 0:
+        if len(gt_elements) == len(pred_elements):
+            score = 1.0
+        else:
+            score = 0.0
+        # When there are no elements, predicting the empty set is a match, otherwise we halve the score for every element.
+        #score = 1.0 / (1.0 + (len(gt_elements) + len(pred_elements))**2)
+    else:
+        gt_entry_embeddings = model.encode(list(gt_elements))
+        model_entry_embeddings = model.encode(list(pred_elements))
+        similarity = model.similarity(gt_entry_embeddings, model_entry_embeddings)
+        if binarize:  # If the max match is above a threshold, treat it like a match.
+            score = ((similarity.max(dim=1).values > threshold) * 1.0).sum().item() / float(max(similarity.shape))
+        else:  # If the max match is above a threshold, add it raw rather than snap to 1.0.
+            score = ((similarity.max(dim=1).values > threshold) * similarity.max(dim=1).values).sum().item() / float(max(similarity.shape))
+        # If the ground truth and model were perfectly aligned we would have a square matrix with ones along the diagonal.
+
+    score = min(1.0, score)  # Sometimes there's some arithmetic error. Snap to 1-0.
 
     """
     gt_pile_of_names = set()
@@ -191,6 +245,9 @@ def eval_ner_flat(ground_truth: NERMultiExtraction, parsed_data: NERMultiExtract
 
 TASK_TO_EVAL_FN = {
     Task.NER_FLAT: eval_ner_flat,
+    Task.NER_NESTED: eval_ner_nested,
+    Task.THING_EXTRACTION: eval_thing_extraction,
+    Task.UNIT_EXTRACTION: eval_unit_extraction,
 }
 
 
