@@ -13,6 +13,12 @@ from task import Task, SCHEMAS, NUEXTRACT_SCHEMAS, EXAMPLES
 from dataset import get_data
 
 
+try:
+    from guardrails import Guard
+except ImportError:
+    Guard = None
+
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -53,34 +59,37 @@ def predict_NuExtract(model, tokenizer, text, schema, examples=["", "", ""], dev
 
 
 def predict_openai(client, model_name, document, schema, examples):
+    messages = [
+        {
+            "role": "system",
+            "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values."
+        },
+        {
+            "role": "user",
+            "content": document
+        }
+    ]
     prediction = client.chat.completions.create(
         model=model_name,
-        messages=[
-            {
-                "role": "system",
-                "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values."
-            },
-            {
-                "role": "user",
-                "content": document
-            }
-        ],
+        messages=messages,
         temperature=0.1,
         max_tokens=2048,
-        top_p=1
+        top_p=1,
+        response_format={"type": "json_object"}  # Toggle 'json mode'.
     ).choices[0].message.content
     return prediction
 
 
 def predict_anthropic(client, model_name, document, schema, examples):
+    messages = [
+        {
+            "role": "user",
+            "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values.\nInput Document:\n" + document,
+        }
+    ]
     prediction = client.messages.create(
         model=model_name,
-        messages=[
-            {
-                "role": "user",
-                "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values.\nInput Document:\n" + document,
-            }
-        ],
+        messages=messages,
         max_tokens=2048,
         temperature=0.1,
         top_p=1
@@ -110,9 +119,9 @@ def run():
         task_str = str(task)[len("Task:"):]
         task_id = db.execute("SELECT id FROM tasks WHERE task = ?;", (task_str.lower(),)).fetchone()["id"]
         for model_provider, model_name in (
-                ("numind", "nuextract"),
-                #("openai", "gpt-3.5-turbo"),
-                #("openai", "gpt-4-turbo"),
+                #("numind", "nuextract-tiny"),
+                ("openai", "gpt-3.5-turbo"),
+                ("openai", "gpt-4-turbo"),
                 #("anthropic", "claude-3-opus-20240229"),
         ):
             model_id = db.execute("SELECT id FROM models WHERE name = ?;", (model_name,)).fetchone()["id"]
@@ -159,7 +168,7 @@ def run():
                         task_id,
                         num_examples,
                         end_time - start_time,
-                        "",
+                        "json_mode",
                         prediction,
                         ex
                     ))

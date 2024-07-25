@@ -170,11 +170,16 @@ def eval_thing_extraction(ground_truth: NestedThingExtraction, parsed_data: Nest
 
 def eval_unit_extraction(ground_truth: NestedUnitExtraction, parsed_data: NestedUnitExtraction, score_ref: Score):
     match_score = 0
+    gt_item_count = 0
+    parsed_data_item_count = 0
     for gt_item in ground_truth.items:
+        gt_item_count += 1
         found = False
         quantity_match = False
         unit_match = False
+        parsed_data_item_count = 0
         for pred_item in parsed_data.items:
+            parsed_data_item_count += 1
             if pred_item.item == gt_item.item:
                 found = True
                 if gt_item.quantity:
@@ -192,6 +197,9 @@ def eval_unit_extraction(ground_truth: NestedUnitExtraction, parsed_data: Nested
             match_score += 0.25
         if unit_match:
             match_score += 0.25
+    if gt_item_count == 0 and parsed_data_item_count == 0:
+        return 1.0
+    match_score /= max(gt_item_count, parsed_data_item_count)
     if score_ref is not None:
         score_ref.eval_score = match_score
     return match_score

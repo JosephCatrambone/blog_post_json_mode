@@ -1,6 +1,35 @@
 
 
+## Evaluating NER
 
+It's not a secret that natural language is messy, and being able to perform a comparison that's fair, informative, and tractable for a short project is its own challenge.  The Language-Independent Named Entity Recognition task (introduced in CoNLL-2003) has a well publicized methodology for evaluating the performance of models.  Roughly speaking, we take chunks or tokens of text and assign them to one of a few types of tags, I-LOC, B-LOC, PER, and so on, then perform an exact match for the entity and compute precision and recall.  Consider a sports news article on The Golden State Warriors vs The Chicago Bulls: “San Francisco faced off against Chicago last night in an extremely contrived NER example.”  Is ‘San Francisco’ a location? Or an organization?  This is an example of metonymy, using a location to refer to an organization.  If San Francisco must match precisely with the labeler’s designation as an ORG or LOC, or it will be considered a full miss.  Additionally, the boundaries of tagged entities must match exactly in the traditional evaluation process: “The Arun Valley Line” and “Arun Valley Line” are two different locations.
+
+We make two simplifying assumptions for our evaluation: first, for the NER task in specific, the label of the recovered entity is ignored. Second, rather than requiring an exact match, we perform a fuzzy match between the thresholded embeddings of the strings.
+
+In greater detail, we use all-mpnet-base-v2 and Sentence Transformers to produce a vector of embeddings for the ground truth, then sum a thresholded maximum.
+
+To illustrate, let’s say our ground truth contains the set of two texts: {“Guardrails AI”, “San Francisco”}.  Our model extracts the following prediction: {“Guardrails AI”, “San Francisco, CA”, “located in”}.  After embedding each of the elements and performing pairwise similarity, we end up with a matrix like this:
+
+| | Guardrails AI | San Francisco, CA | located in |
+|Guardrails AI| 1.0 | 0.005|0.033|
+|San Francisco|0.031|0.891|0.604|
+
+Our exact match between “Guardrails AI” gives us a 1.0.  The rough match between San Francisco and San Francisco, CA gives us 0.891, a strong match.  “located in” is a spurious extraction from our model, and given how well this matches with “San Francisco” we don’t want to dilute our recovered entities with numerous low-quality matches.  If we set our minimal threshold to 1.0, then this becomes, effectively, the CoNLL evaluation (sans the category check).  As we decrease the threshold, we become more tolerant of variations until all scores are perfect.  From experimentation, we find a threshold of 0.7 to be a reasonable cutoff.
+
+After thresholding, we sum the maximum matches and divide by the number of entities recovered by the model or the number of entities in the ground truth; whichever is larger.  In the case of the model above, our final score would be (1.0 + 0.891 + 0.0) / 3 for a score of 0.63.  If the model hadn’t added the spurious text of “located in”, our score would be 0.95.
+
+Additional Examples:
+
+|Score: 0.963|Simpsons|Springfield|Homer|Marge|
+|The Simpsons|0.8551|0.3962|0.5906|0.5196|
+|Springfield|0.4576|1.0|0.3899|0.3809|
+|Homer|0.6699|0.3899|1.0|0.5684|
+|Marge|0.638|0.3809|0.5684|1.0|
+
+|Score: 0.0|Jimmy Hendricks|Never Gonna’ Give You Up|Earth|
+|Rick Astley|0.2891|0.1824|0.1907|
+|Lancashire|0.1819|0.1150|0.2639|
+|England|0.0992|0.1230|0.4088|
 
 ## Types of Errors:
 
@@ -25,3 +54,7 @@ Example:
 ```
 
 Another fairly ubiquitous issue is the inclusion of spurious miscellanea.  Like a junk drawer that relentlessly accumulates things you really should throw away, most of the sampled models can't help but hang on to the odd "misc" item, for example: "blog post", "website", etc.  While technically named items, these are not proper nouns. It's not unreasonable to assume that with additional prompt engineering these types of behaviors would be easy to rectify.
+
+# Citations:
+
+[CONLL Eval] https://pypi.org/project/nervaluate/
