@@ -79,6 +79,7 @@ def run_evaluations():
 
         # Diff the keys to see if we have extras:
         # TODO: Use the BFCL list/dict tree comparison.
+        # DATA_MODELS[Task.EVENT_EXTRACTION].__fields__
         if dict_has_all_fields(DATA_MODELS[task].model_fields, maybe_data):
             s.schema_matches_minimal = True
 

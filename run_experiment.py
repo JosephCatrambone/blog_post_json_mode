@@ -20,21 +20,28 @@ except ImportError:
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+active_model_name = None  # We'll run out of memory on our GPU if we load everything at the same time. Check this against the loaded model.
+active_model = None
+active_tokenizer = None
 
 
-def make_df():
-    return pd.DataFrame(columns=["doc_idx", "task", "model", "dataset", "guardrails", "num_shots", "time", "raw_model_output", "exception"])
-
-
-def append(df, new_data: dict):
-    columns = list(df.columns)
-    new_row = pd.Series([new_data[k] for k in columns], index=df.columns)
-    df = pd.concat([df, new_row.to_frame().T], ignore_index=True)
-    return df
-
-
-def append_run(df, doc_idx, task, model, dataset, guardrails, num_shots, time, raw_model_output, exc):
-    return append(df, {"doc_idx": doc_idx, "task": task, "model": model, "dataset": dataset, "guardrails": guardrails, "num_shots": num_shots, "time": time, "raw_model_output": raw_model_output, "exception": exc})
+def load_cached_active_model(model_name: str):
+    global active_model_name
+    global active_model
+    global active_tokenizer
+    if model_name != active_model_name:
+        active_model.to("cpu")
+        del active_tokenizer
+        del active_model
+        if device == "cuda":
+            torch.cuda.empty_cache()
+        # Load model directly
+        active_model_name = model_name
+        active_tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        active_model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
+        active_model.to(device)
+        active_model.eval()
+    return active_model, active_tokenizer
 
 
 # Set up the inference for the numind nuextract case:
@@ -43,7 +50,8 @@ def append_run(df, doc_idx, task, model, dataset, guardrails, num_shots, time, r
 
 # Taken directly from the NuMind NuExtract documentation
 # https://huggingface.co/numind/NuExtract-tiny
-def predict_NuExtract(model, tokenizer, text, schema, examples=["", "", ""], device="cuda"):
+def predict_NuExtract(text, schema, examples=["", "", ""], device="cuda"):
+    model, tokenizer = load_cached_active_model("numind/NuExtract-tiny")
     schema = json.dumps(json.loads(schema), indent=4)
     input_llm = "<|input|>\n### Template:\n" + schema + "\n"
     for i in examples:
@@ -51,8 +59,7 @@ def predict_NuExtract(model, tokenizer, text, schema, examples=["", "", ""], dev
             input_llm += "### Example:\n" + json.dumps(json.loads(i), indent=4) + "\n"
 
     input_llm += "### Text:\n" + text + "\n<|output|>\n"
-    input_ids = tokenizer(input_llm, return_tensors="pt", truncation=True,
-                          max_length=4000).to(device)
+    input_ids = tokenizer(input_llm, return_tensors="pt", truncation=True, max_length=4000).to(device)
 
     output = tokenizer.decode(model.generate(**input_ids)[0], skip_special_tokens=True)
     return output.split("<|output|>")[1].split("<|end-output|>")[0]
@@ -98,13 +105,29 @@ def predict_anthropic(client, model_name, document, schema, examples):
     return prediction
 
 
+def predict_hf_with_system(provider: str, model_name: str, document, schema, examples):
+    model, tokenizer = load_cached_active_model(f"{provider}/{model_name}")
+    messages = [
+        {
+            "role": "system",
+            "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values."
+        },
+        {
+            "role": "user",
+            "content": document
+        }
+    ]
+    inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+    outputs = model.generate(inputs, max_new_tokens=4096)
+    text = tokenizer.decode(outputs[0], skip_special_tokens=False)  # We want the 'assistant' special token.
+    text = text.split("<|assistant|>")[-1].split("<|end|>")[0]
+    return text
+
+
 def run():
     # Set up models and clients:
     print("Setting up models and clients:")
-    nuextract_model = AutoModelForCausalLM.from_pretrained("numind/NuExtract-tiny", trust_remote_code=True)
-    tokenizer = AutoTokenizer.from_pretrained("numind/NuExtract-tiny", trust_remote_code=True)
-    nuextract_model.to(device)
-    nuextract_model.eval()
+
     anthropic_client = anthropic.Anthropic()
     openai_client = OpenAI()
 
@@ -120,9 +143,10 @@ def run():
         task_id = db.execute("SELECT id FROM tasks WHERE task = ?;", (task_str.lower(),)).fetchone()["id"]
         for model_provider, model_name in (
                 #("numind", "nuextract-tiny"),
-                ("openai", "gpt-3.5-turbo"),
-                ("openai", "gpt-4-turbo"),
+                #("openai", "gpt-3.5-turbo"),
+                #("openai", "gpt-4-turbo"),
                 #("anthropic", "claude-3-opus-20240229"),
+                ("microsoft", "phi-3-mini-4k-instruct")
         ):
             model_id = db.execute("SELECT id FROM models WHERE name = ?;", (model_name,)).fetchone()["id"]
             for num_examples in (0, 1, 3):
@@ -155,7 +179,9 @@ def run():
                         elif model_provider == "anthropic":
                             prediction = predict_anthropic(anthropic_client, model_name, doc_text, schema, maybe_examples)
                         elif model_provider == "numind":
-                            prediction = predict_NuExtract(nuextract_model, tokenizer, doc_text, schema, examples[:num_examples])
+                            prediction = predict_NuExtract(doc_text, schema, examples[:num_examples])
+                        elif model_provider == "microsoft":
+                            prediction = predict_hf_with_system(model_provider, model_name, doc_text, schema, maybe_examples)
                         else:
                             print(f"EXCEPTION: Typo in model_provider: {model_provider}")
                     except Exception as e:
