@@ -50,8 +50,8 @@ def load_cached_active_model(model_name: str):
 
 # Taken directly from the NuMind NuExtract documentation
 # https://huggingface.co/numind/NuExtract-tiny
-def predict_NuExtract(text, schema, examples=["", "", ""], device="cuda"):
-    model, tokenizer = load_cached_active_model("numind/NuExtract-tiny")
+def predict_nuextract(model_name, text, schema, examples=["", "", ""], device="cuda"):
+    model, tokenizer = load_cached_active_model(f"numind/{model_name}")
     schema = json.dumps(json.loads(schema), indent=4)
     input_llm = "<|input|>\n### Template:\n" + schema + "\n"
     for i in examples:
@@ -59,7 +59,7 @@ def predict_NuExtract(text, schema, examples=["", "", ""], device="cuda"):
             input_llm += "### Example:\n" + json.dumps(json.loads(i), indent=4) + "\n"
 
     input_llm += "### Text:\n" + text + "\n<|output|>\n"
-    input_ids = tokenizer(input_llm, return_tensors="pt", truncation=True, max_length=4000).to(device)
+    input_ids = tokenizer(input_llm, return_tensors="pt", truncation=True, max_length=2048).to(device)
 
     output = tokenizer.decode(model.generate(**input_ids)[0], skip_special_tokens=True)
     return output.split("<|output|>")[1].split("<|end-output|>")[0]
@@ -82,7 +82,7 @@ def predict_openai(client, model_name, document, schema, examples):
         temperature=0.1,
         max_tokens=2048,
         top_p=1,
-        response_format={"type": "json_object"}  # Toggle 'json mode'.
+        #response_format={"type": "json_object"}  # Toggle 'json mode'.
     ).choices[0].message.content
     return prediction
 
@@ -143,10 +143,14 @@ def run():
         task_id = db.execute("SELECT id FROM tasks WHERE task = ?;", (task_str.lower(),)).fetchone()["id"]
         for model_provider, model_name in (
                 #("numind", "nuextract-tiny"),
+                #("numind", "nuextract"),
+                #("numind", "nuextract-large"),
                 #("openai", "gpt-3.5-turbo"),
                 #("openai", "gpt-4-turbo"),
+                #("openai", "gpt-4o-mini"),
+                ("openai", "gpt-4"),
                 #("anthropic", "claude-3-opus-20240229"),
-                ("microsoft", "phi-3-mini-4k-instruct")
+                #("microsoft", "phi-3-mini-4k-instruct"),
         ):
             model_id = db.execute("SELECT id FROM models WHERE name = ?;", (model_name,)).fetchone()["id"]
             for num_examples in (0, 1, 3):
@@ -179,7 +183,7 @@ def run():
                         elif model_provider == "anthropic":
                             prediction = predict_anthropic(anthropic_client, model_name, doc_text, schema, maybe_examples)
                         elif model_provider == "numind":
-                            prediction = predict_NuExtract(doc_text, schema, examples[:num_examples])
+                            prediction = predict_nuextract(model_name, doc_text, schema, examples[:num_examples])
                         elif model_provider == "microsoft":
                             prediction = predict_hf_with_system(model_provider, model_name, doc_text, schema, maybe_examples)
                         else:
@@ -194,7 +198,7 @@ def run():
                         task_id,
                         num_examples,
                         end_time - start_time,
-                        "json_mode",
+                        "", #"json_mode", #"function_calling",
                         prediction,
                         ex
                     ))

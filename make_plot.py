@@ -27,10 +27,12 @@ def plot_all(db):
     # Draw a nested barplot by species and sex
     for y in ("valid_json", "minimal_schema_match", "schema_decode_success", "eval_score"):
         g = sns.catplot(
-            data=data, kind="bar", x="mname", y=y, hue="num_samples",
+            data=data.sort_values(by="mname"),
+            kind="bar", x="mname", y=y, hue="num_samples",
             errorbar="sd", palette="dark", alpha=.6, height=5,
+            #order=['place the desired order here']
         )
-        g.figure.set_size_inches(10, 5)
+        g.figure.set_size_inches(15, 5)
         g.despine(left=True)
         g.set_axis_labels("", y.replace("_", " ").capitalize())
         g.legend.set_title("Num Examples")
