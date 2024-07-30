@@ -9,7 +9,7 @@ import torch
 from openai import OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from task import Task, SCHEMAS, NUEXTRACT_SCHEMAS, EXAMPLES
+from task import Task, SCHEMAS, NUEXTRACT_SCHEMAS, EXAMPLES, TOOLS
 from dataset import get_data
 
 
@@ -65,7 +65,7 @@ def predict_nuextract(model_name, text, schema, examples=["", "", ""], device="c
     return output.split("<|output|>")[1].split("<|end-output|>")[0]
 
 
-def predict_openai(client, model_name, document, schema, examples):
+def predict_openai(client, model_name, document, schema, examples, use_json_mode: bool = False, function_calling_tools = None):
     messages = [
         {
             "role": "system",
@@ -76,14 +76,27 @@ def predict_openai(client, model_name, document, schema, examples):
             "content": document
         }
     ]
-    prediction = client.chat.completions.create(
+    extra_args = {}
+    if use_json_mode:
+        extra_args["response_format"] = {"type": "json_object"}
+    if function_calling_tools:
+        extra_args["tool_choice"] = "required"
+        extra_args["tools"] = function_calling_tools
+    response = client.chat.completions.create(
         model=model_name,
         messages=messages,
         temperature=0.1,
         max_tokens=2048,
         top_p=1,
         #response_format={"type": "json_object"}  # Toggle 'json mode'.
-    ).choices[0].message.content
+        **extra_args
+    )
+    if function_calling_tools:
+        # There will almost certainly be only one function call, but...
+        # TODO: Find a nicer join that keeps the consistent prediction style.
+        prediction = "\n".join([tool_call.function.arguments for tool_call in response.choices[0].message.tool_calls])
+    else:
+        prediction = response.choices[0].message.content
     return prediction
 
 
@@ -145,9 +158,9 @@ def run():
                 #("numind", "nuextract-tiny"),
                 #("numind", "nuextract"),
                 #("numind", "nuextract-large"),
-                #("openai", "gpt-3.5-turbo"),
-                #("openai", "gpt-4-turbo"),
-                #("openai", "gpt-4o-mini"),
+                ("openai", "gpt-3.5-turbo"),
+                ("openai", "gpt-4-turbo"),
+                ("openai", "gpt-4o-mini"),
                 ("openai", "gpt-4"),
                 #("anthropic", "claude-3-opus-20240229"),
                 #("microsoft", "phi-3-mini-4k-instruct"),
@@ -198,7 +211,7 @@ def run():
                         task_id,
                         num_examples,
                         end_time - start_time,
-                        "", #"json_mode", #"function_calling",
+                        "function_calling",
                         prediction,
                         ex
                     ))

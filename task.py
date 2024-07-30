@@ -450,3 +450,213 @@ EXAMPLES = {
 }""",
     ]}
 
+
+TOOLS = {
+    Task.NER_FLAT: [
+        {
+            "type": "function",
+            "function": {
+                "name": "extract_ner",
+                "description": "Reporting the list of people, organizations, locations, and miscellaneous actors in the document.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "people": {
+                            "type": "array",
+                            "description": "A list of names of people, generally proper nouns.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "organizations": {
+                            "type": "array",
+                            "description": "A list of names of organizations.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "locations": {
+                            "type": "array",
+                            "description": "A list of the names of locations.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "misc": {
+                            "type": "array",
+                            "description": "A list of 'names' that don't fit into the other categories.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                    },
+                    "required": ["people", "organizations", "locations", "misc"],
+                },
+            },
+        }
+    ],
+    Task.NER_NESTED: [
+        {
+            "type": "function",
+            "function": {
+                "name": "extract_ner",
+                "description": "Reporting the named entities found in a document.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "named_entities": {
+                            "type": "array",
+                            "description": "A list of names of people, locations, organizations, and other things; generally but not exclusively proper nouns.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "text": {
+                                        "type": "string",
+                                        "description": "The name of the entities, taken directly from the document."
+                                    },
+                                    "extraction_type": {
+                                        "type": "string",
+                                        "enum": ["name", "location", "organization", "misc"],
+                                        "description": "The type of entity extracted."
+                                    }
+                                },
+                                "required": ["text", "extraction_type"]
+                            }
+                        }
+                    },
+                    "required": ["named_entities"],
+                },
+            },
+        }
+    ],
+    Task.THING_EXTRACTION: [
+        {
+            "type": "function",
+            "function": {
+                "name": "extract_things",
+                "description": "Report the named entities found in a document.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "things": {
+                            "type": "array",
+                            "description": "A list of the entities found in the document and their types.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "text": {
+                                        "type": "string",
+                                        "description": "The name of the entities, taken directly from the document."
+                                    },
+                                    "thing_type": {
+                                        "type": "string",
+                                        "description": "The type of entity extracted."
+                                    }
+                                },
+                                "required": ["text", "thing_type"]
+                            }
+                        }
+                    },
+                    "required": ["things"],
+                },
+            },
+        }
+    ],
+    Task.UNIT_EXTRACTION: [
+        {
+            "type": "function",
+            "function": {
+                "name": "extract_units",
+                "description": "Report quantities, units, and item names found in the document.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "description": "A list of item names, quantities, and units.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "item": {
+                                        "type": "string",
+                                        "description": "The name of the extracted item, for example 'aspirin' in the context of '10mg of aspirin'."
+                                    },
+                                    "quantity": {
+                                        "type": "number",
+                                        "description": "An integer or floating point number indicating the amount of the given object."
+                                    },
+                                    "unit": {
+                                        "type": "string",
+                                        "description": "The units for the extracted quantities, for example 'oz', 'mg', etc. Leave blank if not found."
+                                    }
+                                },
+                                "required": ["item", "quantity"]
+                            }
+                        }
+                    },
+                    "required": ["items"],
+                },
+            },
+        }
+    ],
+    Task.EVENT_EXTRACTION: [
+        {
+            "type": "function",
+            "function": {
+                "name": "extract_event",
+                "description": "Report an event found in the source document.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "events": {
+                            "type": "array",
+                            "description": "A list of key events found in the source document.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "year": {
+                                        "type": "integer",
+                                        "description": "The year in which the event occurred. Zero if unspecified."
+                                    },
+                                    "month": {
+                                        "type": "integer",
+                                        "description": "The one-indexed month in which the event occurred. Zero if unspecified."
+                                    },
+                                    "day": {
+                                        "type": "integer",
+                                        "description": "The day in which the event occurred. Zero if unspecified."
+                                    },
+                                    "hour": {
+                                        "type": "integer",
+                                        "description": "The hour in which the event occurred, using the 24-hour clock. Zero if unspecified."
+                                    },
+                                    "minute": {
+                                        "type": "integer",
+                                        "description": "The minute in which the event occurred. Zero if unspecified."
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "A string description of the event."
+                                    },
+                                    "location": {
+                                        "type": "object",
+                                        "properties": {
+                                            "latitude": "float",
+                                            "longitude": "float",
+                                            "fine": "string",
+                                            "coarse": "string"
+                                        },
+                                        "description": "Either the latitude and longitude of an event or the fine/coarse location, starting with the smallest available region. Can be empty if unspecified."
+                                    }
+                                },
+                                "required": ["name"]
+                            }
+                        }
+                    },
+                    "required": ["events"],
+                },
+            },
+        }
+    ]
+}
+
