@@ -39,10 +39,39 @@ def plot_all(db):
         g.savefig(f"plot_{y}.png")
 
 
+def compare_function_calls(db):
+    for metric in ("valid_json", "schema_match_minimal", "schema_decode_success", "eval_score"):
+        q = f"""
+        SELECT
+            models.name AS mname, model_outputs.guardrails AS guardrails, AVG(evaluation.{metric}) AS score
+        FROM models
+        JOIN model_outputs ON model_outputs.model_id = models.id
+        JOIN evaluation ON model_outputs.id = evaluation.model_output_id
+        WHERE models.id IN (SELECT id FROM models WHERE name LIKE 'gpt%') AND models.name <> "gpt-4"
+        GROUP BY models.name, model_outputs.guardrails;
+        """
+        data = pd.read_sql_query(q, db)
+        #penguins = sns.load_dataset("penguins")
+
+        # Draw a nested barplot by species and sex
+        g = sns.catplot(
+            data=data.sort_values(by="mname"),
+            kind="bar", x="mname", y="score", hue="guardrails",
+            errorbar="sd", palette="dark", alpha=.6, height=5,
+            #order=['place the desired order here']
+        )
+        g.figure.set_size_inches(15, 5)
+        g.despine(left=True)
+        g.set_axis_labels("", metric.capitalize())
+        g.legend.set_title("Generation Method")
+        g.savefig(f"plot_openai_{metric}.png")
+
+
 def main():
     db = sqlite3.connect("data.db")
     db.row_factory = sqlite3.Row
     plot_all(db)
+    compare_function_calls(db)
 
 
 if __name__ == "__main__":

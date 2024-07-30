@@ -641,12 +641,24 @@ TOOLS = {
                                     "location": {
                                         "type": "object",
                                         "properties": {
-                                            "latitude": "float",
-                                            "longitude": "float",
-                                            "fine": "string",
-                                            "coarse": "string"
+                                            "latitude": {
+                                                "type": "number",
+                                                "description": "The latitude in degrees of the event."
+                                            },
+                                            "longitude": {
+                                                "type": "number",
+                                                "description": "The longitude of the event, if present."
+                                            },
+                                            "fine": {
+                                                "type": "string",
+                                                "description": "The finest available location, if specified. For example: the 'San Francisco' in 'San Francisco, California'."
+                                            },
+                                            "coarse": {
+                                                "type": "string",
+                                                "description": "The coarsest available location, if specified, or blank otherwise. For example, the 'California' in 'Los Angeles, California'."
+                                            }
                                         },
-                                        "description": "Either the latitude and longitude of an event or the fine/coarse location, starting with the smallest available region. Can be empty if unspecified."
+                                        "description": "Either the latitude and longitude of an event or the fine/coarse location, starting with the smallest available region. Can be null if unspecified."
                                     }
                                 },
                                 "required": ["name"]
