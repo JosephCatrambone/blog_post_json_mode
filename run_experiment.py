@@ -138,6 +138,7 @@ def predict_anthropic(client, model_name, document, schema, examples, function_c
 
 def predict_hf_with_instruct_pipe(provider: str, model_name: str, document, schema, examples, constrain_decoding=None):
     pipe = load_cached_pipe(f"{provider}/{model_name}")  # "mistralai/mistral-7b-instruct-v0.3"
+    g = None
     if constrain_decoding:
         g = Guard.from_pydantic(constrain_decoding, output_formatter='jsonformer')
     messages = [
@@ -150,8 +151,9 @@ def predict_hf_with_instruct_pipe(provider: str, model_name: str, document, sche
             "content": document
         }
     ]
-    if constrain_decoding:
-        output = g(pipe, messages).raw_llm_output
+    if g:
+        output = g(pipe, prompt=messages[0]["content"] + "\nInput Document:\n" + messages[1]["content"]).raw_llm_output
+        # output = g(pipe, messages).raw_llm_output
     else:
         output = pipe(messages)
     assert output[0]["generated_text"][-1]["role"] == "assistant"
@@ -206,6 +208,7 @@ def run():
                 #("anthropic", "claude-3-5-sonnet-20240620"),
                 #("microsoft", "phi-3-mini-4k-instruct"),
                 #("meta-llama", "meta-llama-3.1-8b"),
+                #("meta-llama", "meta-llama-3.1-8b-instruct"),
                 ("mistral", "mistral-7b-instruct-v0.3"),
         ):
             model_id = db.execute("SELECT id FROM models WHERE name = ?;", (model_name,)).fetchone()["id"]
