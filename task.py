@@ -451,7 +451,7 @@ EXAMPLES = {
     ]}
 
 
-TOOLS = {
+OPENAI_TOOLS = {
     Task.NER_FLAT: [
         {
             "type": "function",
@@ -670,5 +670,44 @@ TOOLS = {
             },
         }
     ]
+}
+
+# Because of course Anthropic has a different system for tools.
+ANTHROPIC_TOOLS = {
+    Task.NER_FLAT: [
+        {
+            "name": OPENAI_TOOLS[Task.NER_FLAT][0]["function"]["name"],
+            "description": OPENAI_TOOLS[Task.NER_FLAT][0]["function"]["description"],
+            "input_schema": NERMultiExtraction.model_json_schema(),
+        }
+    ],
+    Task.NER_NESTED: [
+        {
+            "name": OPENAI_TOOLS[Task.NER_NESTED][0]["function"]["name"],
+            "description": OPENAI_TOOLS[Task.NER_NESTED][0]["function"]["description"],
+            "input_schema": NERNestedExtraction.model_json_schema(),
+        }
+    ],
+    Task.THING_EXTRACTION: [
+        {
+            "name": OPENAI_TOOLS[Task.THING_EXTRACTION][0]["function"]["name"],
+            "description": OPENAI_TOOLS[Task.THING_EXTRACTION][0]["function"]["description"],
+            "input_schema": NestedThingExtraction.model_json_schema(),
+        }
+    ],
+    Task.UNIT_EXTRACTION: [
+        {
+            "name": OPENAI_TOOLS[Task.UNIT_EXTRACTION][0]["function"]["name"],
+            "description": OPENAI_TOOLS[Task.UNIT_EXTRACTION][0]["function"]["description"],
+            "input_schema": NestedUnitExtraction.model_json_schema(),
+        }
+    ],
+    Task.EVENT_EXTRACTION: [
+        {
+            "name": OPENAI_TOOLS[Task.EVENT_EXTRACTION][0]["function"]["name"],
+            "description": OPENAI_TOOLS[Task.EVENT_EXTRACTION][0]["function"]["description"],
+            "input_schema": NestedEventExtraction.model_json_schema(),
+        }
+    ],
 }
 

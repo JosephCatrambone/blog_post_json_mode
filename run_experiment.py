@@ -5,16 +5,11 @@ import time
 
 import anthropic
 import torch
+from guardrails import Guard
 from openai import OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-from task import Task, SCHEMAS, NUEXTRACT_SCHEMAS, EXAMPLES, TOOLS
-
-
-try:
-    from guardrails import Guard
-except ImportError:
-    Guard = None
+from task import Task, SCHEMAS, NUEXTRACT_SCHEMAS, EXAMPLES, OPENAI_TOOLS, DATA_MODELS, ANTHROPIC_TOOLS
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -109,26 +104,42 @@ def predict_openai(client, model_name, document, schema, examples, use_json_mode
     return prediction
 
 
-def predict_anthropic(client, model_name, document, schema, examples):
+def predict_anthropic(client, model_name, document, schema, examples, function_calling_tools = None):
+    extra_args = {}
+    if function_calling_tools:
+        extra_args["tool_choice"] = "any"
+        extra_args["tools"] = function_calling_tools
     messages = [
         {
             "role": "user",
             "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values.\nInput Document:\n" + document,
         }
     ]
-    prediction = client.messages.create(
+    out = client.messages.create(
         model=model_name,
         messages=messages,
         max_tokens=2048,
         temperature=0.1,
-        top_p=1
-    ).content[0].text
+        top_p=1,
+        **extra_args,
+    )
+    if function_calling_tools:
+        # Try to grab the last entry, which should be tool use:
+        prediction = out.content[-1].input
+        # Could do this.  Might be the better way:
+        #for c in out.content:
+        #    if c.type == 'tool_use':
+        #        prediction = c.input
+    else:
+        prediction = out.content[0].text
     time.sleep(0.1)  # The best rate-limiting.
     return prediction
 
 
-def predict_hf_with_instruct_pipe(provider: str, model_name: str, document, schema, examples):
+def predict_hf_with_instruct_pipe(provider: str, model_name: str, document, schema, examples, constrain_decoding=None):
     pipe = load_cached_pipe(f"{provider}/{model_name}")  # "mistralai/mistral-7b-instruct-v0.3"
+    if constrain_decoding:
+        g = Guard.from_pydantic(constrain_decoding, output_formatter='jsonformer')
     messages = [
         {
             "role": "system",
@@ -139,7 +150,10 @@ def predict_hf_with_instruct_pipe(provider: str, model_name: str, document, sche
             "content": document
         }
     ]
-    output = pipe(messages)
+    if constrain_decoding:
+        output = g(pipe, messages).raw_llm_output
+    else:
+        output = pipe(messages)
     assert output[0]["generated_text"][-1]["role"] == "assistant"
     return output[0]["generated_text"][-1]["content"]
 
@@ -190,9 +204,9 @@ def run():
                 #("openai", "gpt-4"),
                 #("anthropic", "claude-3-opus-20240229"),
                 #("anthropic", "claude-3-5-sonnet-20240620"),
-                #("anthropic", "claude-3-5-sonnet-20240620"),
                 #("microsoft", "phi-3-mini-4k-instruct"),
-                ("meta-llama", "meta-llama-3.1-8b"),
+                #("meta-llama", "meta-llama-3.1-8b"),
+                ("mistral", "mistral-7b-instruct-v0.3"),
         ):
             model_id = db.execute("SELECT id FROM models WHERE name = ?;", (model_name,)).fetchone()["id"]
             for num_examples in (0, 1, 3):
@@ -229,6 +243,7 @@ def run():
                         elif model_provider == "microsoft":
                             prediction = predict_hf_with_system(model_provider, model_name, doc_text, schema, maybe_examples)
                         else:
+                            # Pass DATA_MODELS as constrained_decoding value.
                             prediction = predict_hf_with_instruct_pipe(model_provider, model_name, doc_text, schema, maybe_examples)
                     except Exception as e:
                         ex = str(e)
@@ -240,7 +255,7 @@ def run():
                         task_id,
                         num_examples,
                         end_time - start_time,
-                        "prompt_engineering",  # "json_mode", "function_calling",
+                        "prompt_engineering",  # "json_mode", "function_calling", "constrained_decoding"
                         prediction,
                         ex
                     ))
