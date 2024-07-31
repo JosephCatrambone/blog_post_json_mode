@@ -4,13 +4,11 @@ import sqlite3
 import time
 
 import anthropic
-import pandas as pd
 import torch
 from openai import OpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 from task import Task, SCHEMAS, NUEXTRACT_SCHEMAS, EXAMPLES, TOOLS
-from dataset import get_data
 
 
 try:
@@ -30,7 +28,8 @@ def load_cached_active_model(model_name: str):
     global active_model
     global active_tokenizer
     if model_name != active_model_name:
-        active_model.to("cpu")
+        if active_model is not None:
+            active_model.to("cpu")
         del active_tokenizer
         del active_model
         if device == "cuda":
@@ -42,6 +41,16 @@ def load_cached_active_model(model_name: str):
         active_model.to(device)
         active_model.eval()
     return active_model, active_tokenizer
+
+
+def load_cached_pipe(model_name):
+    global active_model_name
+    global active_model
+    if model_name != active_model_name:
+        del active_model
+        active_model_name = model_name
+        active_model = pipeline("text-generation", model=model_name, device=device, max_new_tokens=2048, )
+    return active_model
 
 
 # Set up the inference for the numind nuextract case:
@@ -114,8 +123,25 @@ def predict_anthropic(client, model_name, document, schema, examples):
         temperature=0.1,
         top_p=1
     ).content[0].text
-    time.sleep(1)  # The best rate-limiting.
+    time.sleep(0.1)  # The best rate-limiting.
     return prediction
+
+
+def predict_hf_with_instruct_pipe(provider: str, model_name: str, document, schema, examples):
+    pipe = load_cached_pipe(f"{provider}/{model_name}")  # "mistralai/mistral-7b-instruct-v0.3"
+    messages = [
+        {
+            "role": "system",
+            "content": f"You will be provided with unstructured data in the form of a document. Your task is to create a JSON object that adheres to the following schema:\n{schema}\n{examples}\nReturn only the result JSON. If data for a given field is not present, provide an empty array ([]) for arrays, an empty string for strings, and null for missing values."
+        },
+        {
+            "role": "user",
+            "content": document
+        }
+    ]
+    output = pipe(messages)
+    assert output[0]["generated_text"][-1]["role"] == "assistant"
+    return output[0]["generated_text"][-1]["content"]
 
 
 def predict_hf_with_system(provider: str, model_name: str, document, schema, examples):
@@ -158,12 +184,15 @@ def run():
                 #("numind", "nuextract-tiny"),
                 #("numind", "nuextract"),
                 #("numind", "nuextract-large"),
-                ("openai", "gpt-3.5-turbo"),
-                ("openai", "gpt-4-turbo"),
-                ("openai", "gpt-4o-mini"),
-                ("openai", "gpt-4"),
+                #("openai", "gpt-3.5-turbo"),
+                #("openai", "gpt-4-turbo"),
+                #("openai", "gpt-4o-mini"),
+                #("openai", "gpt-4"),
                 #("anthropic", "claude-3-opus-20240229"),
+                #("anthropic", "claude-3-5-sonnet-20240620"),
+                #("anthropic", "claude-3-5-sonnet-20240620"),
                 #("microsoft", "phi-3-mini-4k-instruct"),
+                ("meta-llama", "meta-llama-3.1-8b"),
         ):
             model_id = db.execute("SELECT id FROM models WHERE name = ?;", (model_name,)).fetchone()["id"]
             for num_examples in (0, 1, 3):
@@ -200,7 +229,7 @@ def run():
                         elif model_provider == "microsoft":
                             prediction = predict_hf_with_system(model_provider, model_name, doc_text, schema, maybe_examples)
                         else:
-                            print(f"EXCEPTION: Typo in model_provider: {model_provider}")
+                            prediction = predict_hf_with_instruct_pipe(model_provider, model_name, doc_text, schema, maybe_examples)
                     except Exception as e:
                         ex = str(e)
                     end_time = time.time()
@@ -211,7 +240,7 @@ def run():
                         task_id,
                         num_examples,
                         end_time - start_time,
-                        "function_calling",
+                        "prompt_engineering",  # "json_mode", "function_calling",
                         prediction,
                         ex
                     ))

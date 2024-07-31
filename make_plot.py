@@ -17,7 +17,7 @@ def plot_all(db):
     JOIN tasks ON tasks.id = model_outputs.task_id
     JOIN models ON models.id = model_outputs.model_id
     JOIN documents ON documents.id = model_outputs.document_id
-    WHERE model_outputs.guardrails = ""
+    WHERE model_outputs.guardrails = "prompt_engineering"
     --WHERE documents.source = "golden" AND tasks.task = "ner_flat" --AND document_id = 30
     GROUP BY models.name, model_outputs.num_samples;
     """
@@ -32,9 +32,9 @@ def plot_all(db):
             errorbar="sd", palette="dark", alpha=.6, height=5,
             #order=['place the desired order here']
         )
-        g.figure.set_size_inches(15, 5)
+        g.figure.set_size_inches(20, 5)
         g.despine(left=True)
-        g.set_axis_labels("", y.replace("_", " ").capitalize())
+        g.set_axis_labels("", y.replace("_", " ").upper())
         g.legend.set_title("Num Examples")
         g.savefig(f"plot_{y}.png")
 
@@ -47,7 +47,7 @@ def compare_function_calls(db):
         FROM models
         JOIN model_outputs ON model_outputs.model_id = models.id
         JOIN evaluation ON model_outputs.id = evaluation.model_output_id
-        WHERE models.id IN (SELECT id FROM models WHERE name LIKE 'gpt%') AND models.name <> "gpt-4"
+        WHERE models.id IN (SELECT id FROM models WHERE name LIKE 'gpt%')
         GROUP BY models.name, model_outputs.guardrails;
         """
         data = pd.read_sql_query(q, db)
@@ -60,9 +60,9 @@ def compare_function_calls(db):
             errorbar="sd", palette="dark", alpha=.6, height=5,
             #order=['place the desired order here']
         )
-        g.figure.set_size_inches(15, 5)
+        g.figure.set_size_inches(10, 5)
         g.despine(left=True)
-        g.set_axis_labels("", metric.capitalize())
+        g.set_axis_labels("", metric.replace("_", " ").upper())
         g.legend.set_title("Generation Method")
         g.savefig(f"plot_openai_{metric}.png")
 

@@ -1,0 +1,9 @@
+transformers
+sentencepiece
+ipython
+guardrails-ai
+huggingface_hub[cli]
+anthropic
+openai
+pandas
+unidecode
