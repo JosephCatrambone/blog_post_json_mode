@@ -11,7 +11,7 @@ sns.set_theme(style="whitegrid")
 def plot_all(db):
     q = """
     SELECT
-        models.name AS mname, model_outputs.num_samples AS num_samples, AVG(evaluation.valid_json) AS valid_json, AVG(schema_match_minimal) AS minimal_schema_match, AVG(schema_decode_success) AS schema_decode_success, AVG(evaluation.eval_score) AS eval_score
+        models.display_name AS mname, model_outputs.num_samples AS num_samples, AVG(evaluation.valid_json) AS valid_json, AVG(schema_match_minimal) AS minimal_schema_match, AVG(schema_decode_success) AS schema_decode_success, AVG(evaluation.eval_score) AS eval_score
     FROM evaluation
     JOIN model_outputs ON evaluation.model_output_id = model_outputs.id
     JOIN tasks ON tasks.id = model_outputs.task_id
@@ -32,7 +32,8 @@ def plot_all(db):
             errorbar="sd", palette="dark", alpha=.6, height=5,
             #order=['place the desired order here']
         )
-        g.figure.set_size_inches(20, 5)
+        #g.set(ylim=(0, 1))
+        g.figure.set_size_inches(25, 5)
         g.despine(left=True)
         g.set_axis_labels("", y.replace("_", " ").upper())
         g.legend.set_title("Num Examples")
@@ -43,11 +44,11 @@ def compare_function_calls(db):
     for metric in ("valid_json", "schema_match_minimal", "schema_decode_success", "eval_score"):
         q = f"""
         SELECT
-            models.name AS mname, model_outputs.guardrails AS guardrails, AVG(evaluation.{metric}) AS score
+            models.display_name AS mname, model_outputs.guardrails AS guardrails, AVG(evaluation.{metric}) AS score
         FROM models
         JOIN model_outputs ON model_outputs.model_id = models.id
         JOIN evaluation ON model_outputs.id = evaluation.model_output_id
-        WHERE models.id IN (SELECT id FROM models WHERE name LIKE 'gpt%')
+        WHERE models.id IN (SELECT id FROM models WHERE (name LIKE "gpt%" or name LIKE "claude%"))
         GROUP BY models.name, model_outputs.guardrails;
         """
         data = pd.read_sql_query(q, db)
@@ -60,18 +61,77 @@ def compare_function_calls(db):
             errorbar="sd", palette="dark", alpha=.6, height=5,
             #order=['place the desired order here']
         )
-        g.figure.set_size_inches(10, 5)
+        #g.set(ylim=(0, 1))
+        g.figure.set_size_inches(15, 5)
         g.despine(left=True)
         g.set_axis_labels("", metric.replace("_", " ").upper())
         g.legend.set_title("Generation Method")
         g.savefig(f"plot_openai_{metric}.png")
 
 
+def compare_constrained_decoding(db):
+    for metric in ("valid_json", "schema_match_minimal", "schema_decode_success", "eval_score"):
+        q = f"""
+        SELECT
+            models.display_name AS mname, model_outputs.guardrails AS guardrails, AVG(evaluation.{metric}) AS score
+        FROM models
+        JOIN model_outputs ON model_outputs.model_id = models.id
+        JOIN evaluation ON model_outputs.id = evaluation.model_output_id
+        WHERE models.id IN (SELECT id FROM models WHERE (name LIKE "meta-llama%" or name LIKE "mistral%"))
+        GROUP BY models.name, model_outputs.guardrails;
+        """
+        data = pd.read_sql_query(q, db)
+        #penguins = sns.load_dataset("penguins")
+
+        # Draw a nested barplot by species and sex
+        g = sns.catplot(
+            data=data.sort_values(by="mname"),
+            kind="bar", x="mname", y="score", hue="guardrails",
+            errorbar="sd", palette="dark", alpha=.6, height=5,
+            #order=['place the desired order here']
+        )
+        if metric != "eval_score":
+            g.set(ylim=(0, 1))
+        g.figure.set_size_inches(10, 5)
+        g.despine(left=True)
+        g.set_axis_labels("", metric.replace("_", " ").upper())
+        g.legend.set_title("Generation Method")
+        g.savefig(f"plot_cd_{metric}.png")
+
+
+def compare_latencies(db):
+    q = f"""
+            SELECT
+                models.display_name AS mname, model_outputs.guardrails, model_outputs.time AS latency
+            FROM models
+            JOIN model_outputs ON model_outputs.model_id = models.id
+            JOIN evaluation ON model_outputs.id = evaluation.model_output_id
+            WHERE model_outputs.num_samples = 0 AND (models.name LIKE "gpt%" or models.name LIKE "claude%") AND model_outputs.exception = "";
+    """
+    data = pd.read_sql_query(q, db)
+    # penguins = sns.load_dataset("penguins")
+
+    # Draw a nested barplot by species and sex
+    g = sns.catplot(
+        data=data.sort_values(by="mname"),
+        kind="bar", x="mname", y="latency", hue="guardrails",
+        errorbar=("sd", 0.5), palette="dark", alpha=.6, height=5,
+        # order=['place the desired order here']
+    )
+    g.figure.set_size_inches(15, 5)
+    g.despine(left=True)
+    g.set_axis_labels("", "Latency (seconds)")
+    g.legend.set_title("Generation Method")
+    g.savefig(f"plot_latency.png")
+
+
 def main():
     db = sqlite3.connect("data.db")
     db.row_factory = sqlite3.Row
-    plot_all(db)
-    compare_function_calls(db)
+    #plot_all(db)
+    #compare_function_calls(db)
+    #compare_constrained_decoding(db)
+    compare_latencies(db)
 
 
 if __name__ == "__main__":
